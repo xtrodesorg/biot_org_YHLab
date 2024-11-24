@@ -7,7 +7,7 @@ from constants import *
 
 if __name__=='__main__':
     username = 'amiel.w@xtrodes.com'
-    password = 'Xtr@56130'
+    password = '****'
 
     manufacturer_id = '00000000-0000-0000-0000-000000000000'
     test_org_id = 'c130d275-901b-4ca9-bc54-c064bf09e599'
