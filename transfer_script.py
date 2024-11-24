@@ -7,7 +7,7 @@ from constants import *
 
 if __name__=='__main__':
     username = 'amiel.w@xtrodes.com'
-    password = 'Xtr@56130'
+    password = '****'
     user_agent='Mozilla/5.0 (X11; Linux x86_64 ) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36'
 
     manufacturer_id = '00000000-0000-0000-0000-000000000000'
