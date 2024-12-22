@@ -1,0 +1,21 @@
+#Later change to auto generation with templates manager
+
+montage_configuration:
+  ref_field:  
+    - "patch"
+  ref_template:
+    - "patch"
+
+channel:
+  ref_field:  
+    - "montage_configuration"
+  ref_template:
+    - "montage_configuration"
+
+
+calibration_step:
+
+  ref_field:  
+    - "montage_calibraterd"
+  ref_template:
+    - "montage_configuration"

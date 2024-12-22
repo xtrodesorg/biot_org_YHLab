@@ -3,144 +3,135 @@ from biot_python_sdk.biot import *
 from biot_python_sdk import BioT_API_URLS
 from login import get_access_token
 from utils.git import * 
-from utils.data_proc import *
+from utils.json_processing import *
+from utils.biot_helpers import *
 from constants import *
+from datetime import datetime
 
-
+DEV_BASE_URL = 'https://api.dev.xtrodes1.biot-med.com'
 class OrgState:
-    def __init__(self,org_id,report_name,env,username,password):
+    def __init__(self,org_name,env,username,password):
+        
+        self.env = env
+
         token = get_access_token(username,password,env)
-        api_client = APIClient(base_url=BASE_URL)
+        api_client = APIClient(base_url=DEV_BASE_URL)
         biot_client = BiotClient(api_client, token=token)
         self.data_mgr = DataManager(biot_client,allow_delete=True)
         self.report_mgr = ReportManager(self.data_mgr)
+    
+        self.org_id = self.data_mgr._get_org_id_from_name(org_name)
+        self.org_name = org_name
+        
 
-        self.org_id=org_id
-        self.state_dict={}
-        self.based_report_name = report_name
-        self.env = env
+        self.biot_state_time_stamp = None
+        self.load_state_from_biot()
+        self.load_state_from_repo()
+        self.check_repo_and_biot_diffs()
 
-        response=self.data_mgr._make_authenticated_request( ORGANIZATION_URL+f'/{org_id}', method='GET', json=None)
-        org_dict = response.json()
-        self.org_name = org_dict['_name']
-        self.state_dict=self.format_report_to_state_dict(report_name)
 
-    def push_state_to_github(self): #decide repo name format
+    def push_state_to_repo_with_release(self): #decide repo name format
         file_name = self._format_file_state_name()
+
         with open(file_name, 'w') as f:
-            json.dump(self.state_dict, f)
+            json.dump(self.biot_state_dict, f)
         branch_name = self.env
         repo_name = f'biot_org_{self.org_name}'
         commit_file(repo_name, branch_name,GITHUB_TOKEN,file_name)
-  
-    
-    def get_json_from_repo(self):
+        #add relase
+        #create_realese()
+
+    def load_state_from_repo(self):
         repo_name = f'biot_org_{self.org_name}'
         file_name = self._format_file_state_name()
         branch_name = self.env
         clone_git_repo(repo_name,GITHUB_TOKEN)
         os.chdir(repo_name)
         subprocess.call(["git" ,"checkout", f"{branch_name}"])
-        with open(file_name,'r') as f:
-            state_json_str=f.read()
-        current_repo_state= json.loads(state_json_str)
+        try:
+            with open(file_name,'r') as f:
+                state_json_str=f.read()
+                self.repo_state_dict = json.loads(state_json_str)
+        except:
+            print("No configuration file in repo")
+            self.repo_state_dict = None
+        os.chdir('..')
 
-        return current_repo_state
+    def load_state_from_biot(self):
+        self.biot_state_time_stamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        filter = {"_templateName":{"eq":"montage_configuration"},"_ownerOrganization.id":{"eq":self.org_id}}
+        m_response = self.data_mgr.get_ge_by_filter(filter)
+        montages_lst = list()
+        
+        for m in m_response["data"]:
+            m_dict = clean_entity_dict_for_repo_json(m)
+            
 
-    def format_report_to_state_dict(self,report_name):
-        ge_state_dict = {'montage_configuration':[],'channel':[],'calibration_step':[],'patch':[],'sensor':[]}
-        report_data=self.report_mgr.get_report_file_by_name(report_name)
-        device_state_list =report_data['device']
-        ge_report = report_data['generic-entity']
-        for ge_dict in ge_report:
-            if ge_dict['_ownerOrganization']['id']==self.org_id:
-                ge_state_dict[ge_dict['_template']['name']].append(ge_dict)
-        return {'generic-entity':ge_state_dict,'device': device_state_list }
+
+            clb_steps_lst = get_clean_ge_by_template_org(self.data_mgr,self.org_id,"calibration_step","montage_calibraterd" , m["_id"])
+            channel_lst = get_clean_ge_by_template_org(self.data_mgr,self.org_id,"channel","montage_configuration" , m["_id"])
+            m_dict['calibration_step'] = clb_steps_lst
+            m_dict['channel'] = channel_lst
+
+            montages_lst.append(m_dict)
+
+        sensor_lst = get_clean_ge_by_template_org(self.data_mgr,self.org_id,"sensor")
+        patch_lst = get_clean_ge_by_template_org(self.data_mgr,self.org_id,"patch")
+
+
+        biot_state_dict = {"montage_configuration":montages_lst,"sensor":sensor_lst,"patch":patch_lst}
+        self.biot_state_dict =biot_state_dict
+
+    def check_repo_and_biot_diffs(self):
+        
+        state_diff_dict = {}
+        
+        for template in ('montage_configuration','patch','sensor'):
+
+            miss_add_diff_dict = compare_if_name_key_in_one_list_only(self.biot_state_dict[template], self.repo_state_dict[template],'biot','repo')
+            existing_with_diff_dict = compare_lists_of_dicts(self.biot_state_dict[template], self.repo_state_dict[template],'biot','repo')
+            if miss_add_diff_dict:
+                state_diff_dict[template] = miss_add_diff_dict
+            if existing_with_diff_dict:
+                if template not in state_diff_dict.keys():
+                    state_diff_dict[template]={}
+                state_diff_dict[template]['diffs'] = existing_with_diff_dict
+        
+        for montage_biot in self.biot_state_dict["montage_configuration"]:
+            for montage_repo in self.repo_state_dict["montage_configuration"]:
+                if montage_repo["_name"]==montage_biot["_name"]:
+                    for template in ('channel','calibration_step'): 
+                        miss_add_diff_dict = compare_if_name_key_in_one_list_only(montage_biot[template], montage_repo[template],'biot','repo')
+                        existing_with_diff_dict = compare_lists_of_dicts(montage_biot[template], montage_repo[template],'biot','repo')
+                        if miss_add_diff_dict:
+                            if montage_biot["_name"] not in state_diff_dict["montage_configuration"]['diffs'].keys():
+                                state_diff_dict["montage_configuration"][template][montage_biot["_name"]]={}
+                            state_diff_dict["montage_configuration"]['diffs'][montage_biot["_name"]][template]= miss_add_diff_dict
+                        if existing_with_diff_dict:
+                            if montage_biot["_name"] not in state_diff_dict["montage_configuration"]['diffs'].keys():
+                                state_diff_dict["montage_configuration"]['diffs'][template][montage_biot["_name"]]={}
+                            if template not in state_diff_dict["montage_configuration"]['diffs'][montage_biot["_name"]].keys():
+                                state_diff_dict["montage_configuration"]['diffs'][montage_biot["_name"]][template]={}
+                            
+                            state_diff_dict["montage_configuration"]['diffs'][montage_biot["_name"]][template]['diffs'] = existing_with_diff_dict
+                    break    
+        self.state_diff_dict =state_diff_dict
+                    
+
+    def revert_to_repo_state(self):
+        if self.state_diff_dict!={}:
+            templates_order = ("patch", "montage_configuration", "channel","calibration_step","sensor")
+            # fields to fic (owner_org, template,refs[]list)
+            for template in templates_order:
+                revert_template_to_repo(self,template)
+        else:
+            print("No Reversions Need. States Already Synced")
+        
+       
     
     def _format_file_state_name(self): 
         return f'biot_org_{self.org_name}_state.json'
 
-
-    def switch_envs(env,user_agent,username,password):
+    def check_for_floating_ge(self):
         pass
 
-
-class StateDiff:
-
-    def __init__(self,org_state):
-
-        #support devices to.
-        self.org_state =org_state
-        self.report_mgr =org_state.report_mgr
-        self.data_mgr = org_state.report_mgr.data_mgr
-        self.diff_ge_state_dict=self.compare_biot_and_repo_states()
-        pass
-
-    def compare_biot_and_repo_states(self):
-   
-        diff_ge_state_dict = {'montage_configuration':[],'channel':[],'calibration_step':[],'patch':[],'sensor':[]}
-        state_repo_dict=self.org_state.get_json_from_repo()
-        ge_state_repo_dict = state_repo_dict['generic-entity']
-        biot_ge_state_dict=self.org_state.state_dict['generic-entity']
-        
-        for ge_template in biot_ge_state_dict.keys():
-            diff_ge_state_dict[ge_template]=compare_dict_lists(biot_ge_state_dict[ge_template], ge_state_repo_dict[ge_template],'biot','repo')
-            pass
-        return diff_ge_state_dict
-
-
-    def revert_to_repo_state(self):
-        
-        ge_to_add_list=[]
-        ge_state_dict=self.org_state.state_dict['generic-entity']
-        assests_to_assign_dict={'montage_configuration': [],'sensor':[],'patch':[]}
-        
-        templates_parents_dict = {'calibration_step':'montage_calibraterd','channel':'montage_configuration'}
-        #check for entity with missing links->delte.
-        for tempalte in templates_parents_dict.keys():
-            for e in ge_state_dict[tempalte]:
-                missing_reference = False
-                if templates_parents_dict[tempalte] in e.keys():
-                    if e[templates_parents_dict[tempalte]]=={} or e[templates_parents_dict[tempalte]]==None:
-                        missing_reference=True
-                    #check if parent in to add. -> if not add to GE to add.
-                else:
-                    missing_reference=True
-                if missing_reference:
-                    if tempalte not in ('calibration_step','channel'):
-                        assests_to_assign_dict[tempalte].append(e['_name'])
-                    #response = self.data_mgr._make_authenticated_request(f'{GENERIC_ENTITES_URL}/{e['_id']}',method='DELETE')
-                    #print(e['_name'],'delete attempt reponse:',response)
-
-        #1. delete extra ge
-        for template in self.diff_ge_state_dict.keys():
-            
-            #1. delete extra ge
-            for entity in self.diff_ge_state_dict[template]['only_in_biot']:
-                response = self.data_mgr._make_authenticated_request(f'{GENERIC_ENTITES_URL}/{entity['_id']}',method='DELETE')
-                print(entity['_name'],'delete attempt reponse:',response)
-    
-            #2.  add new ge
-            if template in assests_to_assign_dict.keys():
-                for e in self.diff_ge_state_dict[template]['only_in_repo']:
-                    assests_to_assign_dict[template].append(e['_name'])
-            else:
-                for e in self.diff_ge_state_dict[template]['only_in_repo']:
-                   for key in e.keys():
-                       if 'montage' in key:
-                           filter= {"_name":{"eq":e[key]["name"]},"_templateName": {"eq": "montage_configuration"}, "_ownerOrganization.id": {"eq": self.org_state.org_id}}
-                           response = self.data_mgr.get_ge_by_filter( filter)
-                           if response:
-                            if response['data']!=[]:
-                                self.report_mgr.post_report_json([e],'generic-entity')
-
-            #3.  update differnce
-            if self.diff_ge_state_dict[template]['in_both_diff_values']['repo']!=[]:
-                for entity in self.diff_ge_state_dict[template]['in_both_diff_values']['repo']:
-                    post_json=format_report_line_api(entity)
-                    endpoint=f'{GENERIC_ENTITES_URL}/{entity['_id']}'
-                    response = self.data_mgr._make_authenticated_request(endpoint=endpoint, method='PATCH',json=post_json)
-                    if response:
-                        print(response,':' ,response.content)
-                    
-        self.org_state.report_mgr.full_org_transfer_wrapper(manufacturer_id,self.org_state.org_id,self.org_state.based_report_name,assests_to_assign_dict)

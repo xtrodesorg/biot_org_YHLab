@@ -164,6 +164,38 @@ def commit_file(repo_name, branch_name,github_token,file_name):
     commit_message = 'updated org by org manager build whatever' # todo change later
     subprocess.run(["git","commit",'-m',f'{commit_message}'])
     subprocess.run(["git","push",'-u','origin',f'{branch_name}','--force-with-lease'])
+
+
+def create_realese(GITHUB_TOKEN,repo_name,tag_name,release_body):
+    
+    url = f'https://api.github.com/repos/xtrodesorg/{repo_name}/releases'
+
+    # Headers for the request
+    headers = {
+        'Authorization': f'token {GITHUB_TOKEN}',
+        'Accept': 'application/vnd.github.v3+json'
+    }
+
+    # Data for the release
+    data = {
+        'tag_name': tag_name,
+        'target_commitish': 'main',  # or the branch you want to release from
+        'name': release_body,
+        'body': release_body,
+        'draft': False,
+        'prerelease': False
+    }
+
+    # Make the POST request to create the release
+    response = requests.post(url, headers=headers, data=json.dumps(data))
+
+    # Check the response
+    if response.status_code == 201:
+        print('Release created successfully!')
+        print(response.json())
+    else:
+        print(f'Failed to create release: {response.status_code}')
+        print(response.json())
     
 
 
