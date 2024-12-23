@@ -22,7 +22,6 @@ def get_clean_ge_by_template_org(data_mgr,org_id,template_name,montage_field_fil
 
 
 def post_entity_from_repo_by_template(template_diff_dict,template_repo_lst,template,org_id,data_mgr):
-   #add post
    for e_name in template_diff_dict["only_in_repo"]:
       for e_repo in template_repo_lst:
          if e_repo["_name"]==e_name:
