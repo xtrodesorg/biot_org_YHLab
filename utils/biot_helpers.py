@@ -41,7 +41,7 @@ def post_entity_from_repo_by_template(template_diff_dict,template_repo_lst,templ
                         sub_e_repo = replace_ref_names_with_ref_id(data_mgr,sub_e_repo,sub_template,org_id)
                         del sub_e_repo["_template"]
                         response = data_mgr._make_authenticated_request(GENERIC_ENTITES_URL+f'/templates/{sub_template}','POST',sub_e_repo)
-                        print(f'Entity {e_name} of template {template} Posted, {response} \n')
+                        print(f'Entity {e_name} of template {template} Posted. \n')
             break
 
 
