@@ -4,6 +4,8 @@ import os
 import requests
 import shutil
 from pathlib import Path
+import zipfile
+from constants import *
 
 
 
@@ -16,51 +18,51 @@ Description: This functions handels the git repos for the biot organizations.
 """
 
 
-def repo_exists(repo_name,github_token):
+def repo_exists(repo_name,GITHB_TOKEN):
     """
     Check if a GitHub repository already exists.
 
     Parameters:
     repo_name (str): The name of the repository to check.
-    github_token (str): Personal access token for GitHub API authentication.
+    GITHB_TOKEN (str): Personal access token for GitHub API authentication.
 
     Returns:
     bool: True if the repository exists, False otherwise.
     """
-    url = f"https://{github_token}@github.com/xtrodesorg/{repo_name}.git"
+    url = f"https://{GITHB_TOKEN}@github.com/xtrodesorg/{repo_name}.git"
     response = requests.get(url)
     return response.status_code == 200
 
-def clone_git_repo(repo_name,github_token):
+def clone_git_repo(repo_name,GITHB_TOKEN):
 
     """
     Clone a GitHub repository. If it already exists locally, remove it and clone again.
     
     Parameters:
     repo_name (str): The name of the repository to clone.
-    github_token (str): Personal access token for GitHub API authentication.
+    GITHB_TOKEN (str): Personal access token for GitHub API authentication.
     """
 
     if os.path.exists(repo_name):
         shutil.rmtree(repo_name)
-    if not repo_exists(repo_name,github_token):
-        create_repo(repo_name, github_token)
+    if not repo_exists(repo_name,GITHB_TOKEN):
+        create_repo(repo_name, GITHB_TOKEN)
     commands = [
-        f'git clone https://{github_token}@github.com/xtrodesorg/{repo_name}.git {repo_name}',
-        f'git remote set-url origin https://{github_token}@github.com/xtrodesorg/{repo_name}.git']
+        f'git clone https://{GITHB_TOKEN}@github.com/xtrodesorg/{repo_name}.git {repo_name}',
+        f'git remote set-url origin https://{GITHB_TOKEN}@github.com/xtrodesorg/{repo_name}.git']
     for command in commands:
         subprocess.run(command, shell=True)
 
-def create_branches(github_token, repo_name):
+def create_branches(GITHB_TOKEN, repo_name):
     """
     Create 'production' and 'development' branches in the cloned repository.
 
     Parameters:
-    github_token (str): Personal access token for GitHub API authentication.
+    GITHB_TOKEN (str): Personal access token for GitHub API authentication.
     repo_name (str): The name of the repository where branches will be created.
     """
 
-    clone_git_repo(repo_name,github_token)
+    clone_git_repo(repo_name,GITHB_TOKEN)
     os.chdir(repo_name)
 
     # Rename the default branch to 'production'
@@ -89,14 +91,14 @@ def create_branches(github_token, repo_name):
     shutil.rmtree(repo_name)
 
 
-def create_repo(repo_name, github_token):
+def create_repo(repo_name, GITHB_TOKEN):
 
     """
     Create a new GitHub repository.
 
     Parameters:
     repo_name (str): The name of the new repository.
-    github_token (str): Personal access token for GitHub API authentication.
+    GITHB_TOKEN (str): Personal access token for GitHub API authentication.
 
     Returns:
     int: HTTP status code from the API response.
@@ -105,7 +107,7 @@ def create_repo(repo_name, github_token):
     url = f"https://api.github.com/orgs/xtrodesorg/repos"
     session = requests.Session()
     headers = {
-        "Authorization": f"token {github_token}",
+        "Authorization": f"token {GITHB_TOKEN}",
         "Accept": "application/vnd.github.v3+json"
     }
     data = {
@@ -113,7 +115,7 @@ def create_repo(repo_name, github_token):
     }
     response = session.post(url, headers=headers, data=json.dumps(data))
     if response.status_code==201:
-        create_branches(github_token, repo_name)
+        create_branches(GITHB_TOKEN, repo_name)
     return response.status_code
 
 
@@ -141,18 +143,18 @@ def checkout_branch(branch_name):
 
 
 
-def commit_file(repo_name, branch_name,github_token,file_name):
+def commit_file(repo_name, branch_name,GITHB_TOKEN,file_name):
     """
     Commit a file to a specified branch in a GitHub repository.
 
     Parameters:
     repo_name (str): The name of the repository.
     branch_name (str): The branch where the file will be committed.
-    github_token (str): Personal access token for GitHub API authentication.
+    GITHB_TOKEN (str): Personal access token for GitHub API authentication.
     file_name (str): The name of the file to be committed.
     """
     
-    clone_git_repo(repo_name,github_token)
+    clone_git_repo(repo_name,GITHB_TOKEN)
     os.chdir(repo_name)
     #subprocess.call(["git","checkout",f"{branch_name}"])
     checkout_branch(branch_name)
@@ -166,13 +168,13 @@ def commit_file(repo_name, branch_name,github_token,file_name):
     subprocess.run(["git","push",'-u','origin',f'{branch_name}','--force-with-lease'])
 
 
-def create_realese(GITHUB_TOKEN,repo_name,tag_name,release_body):
+def create_realese(GITHB_TOKEN,repo_name,tag_name,release_body):
     
     url = f'https://api.github.com/repos/xtrodesorg/{repo_name}/releases'
 
     # Headers for the request
     headers = {
-        'Authorization': f'token {GITHUB_TOKEN}',
+        'Authorization': f'token {GITHB_TOKEN}',
         'Accept': 'application/vnd.github.v3+json'
     }
 
@@ -197,5 +199,43 @@ def create_realese(GITHUB_TOKEN,repo_name,tag_name,release_body):
         print(f'Failed to create release: {response.status_code}')
         print(response.json())
     
+
+
+def get_release_files(org_name, tag):
+    # GitHub API URL for releases
+    url = f"https://api.github.com/repos/xtrodesorg/biot_org_{org_name}/releases/tags/{tag}"
+
+    headers = {
+        'Authorization': f'token {GITHB_TOKEN}',
+        'Accept': 'application/vnd.github.v3+json'
+    }
+
+    # Make a GET request to the GitHub API
+    response = requests.get(url, headers=headers)
+    # Check if the request was successful
+    if response.status_code == 200:
+        release_data = response.json()
+        assets = release_data.get('assets', [])
+        response=requests.get(release_data['zipball_url'])
+        zip_bytes = response.content
+        with open('zip_f.zip', 'wb') as zip_ref:
+                zip_ref.write(zip_bytes)
+        release_files = {}
+        with zipfile.ZipFile('zip_f.zip', 'r') as zip_ref:
+                #zip_ref.extractall('.')
+                for file_info in zip_ref.infolist():
+                            with zip_ref.open(file_info) as file:
+                                file_content = file.read()
+                                if file_content!=b'':
+                                    file_name = file.name.split('/')[-1]
+                                    release_files[file_name] = file_content
+                                print(f"Extracted {file_info.filename} in memory")
+                print(f"Extracted  to {'.'}")
+
+
+        return release_files
+    else:
+        print(f"Failed to retrieve release information. Status code: {response.status_code}")
+        return None
 
 

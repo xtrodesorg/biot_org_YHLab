@@ -10,7 +10,7 @@ from datetime import datetime
 
 DEV_BASE_URL = 'https://api.dev.xtrodes1.biot-med.com'
 class OrgState:
-    def __init__(self,org_name,env,username,password):
+    def __init__(self,org_name,env,username,password,release_tag= None):
         
         self.env = env
 
@@ -26,7 +26,12 @@ class OrgState:
 
         self.biot_state_time_stamp = None
         self.load_state_from_biot()
-        self.load_state_from_repo()
+        if release_tag == None:
+            self.load_current_repo_state()
+            self.repo_state_release_tag= None
+        else:
+            self.load_release_repo_state(release_tag)
+            self.repo_state_release_tag= release_tag
         self.check_repo_and_biot_diffs()
 
 
@@ -37,15 +42,15 @@ class OrgState:
             json.dump(self.biot_state_dict, f)
         branch_name = self.env
         repo_name = f'biot_org_{self.org_name}'
-        commit_file(repo_name, branch_name,GITHUB_TOKEN,file_name)
+        commit_file(repo_name, branch_name,GITHB_TOKEN,file_name)
         #add relase
         #create_realese()
 
-    def load_state_from_repo(self):
+    def load_current_repo_state(self):
         repo_name = f'biot_org_{self.org_name}'
         file_name = self._format_file_state_name()
         branch_name = self.env
-        clone_git_repo(repo_name,GITHUB_TOKEN)
+        clone_git_repo(repo_name,GITHB_TOKEN)
         os.chdir(repo_name)
         subprocess.call(["git" ,"checkout", f"{branch_name}"])
         try:
@@ -56,6 +61,12 @@ class OrgState:
             print("No configuration file in repo")
             self.repo_state_dict = None
         os.chdir('..')
+
+    def load_release_repo_state(self,release_tag):
+        
+        release_files = get_release_files(self.org_name, release_tag)
+        self.repo_state_dict  = json.loads(release_files[f'biot_org_{self.org_name}_state.json'])
+        pass
 
     def load_state_from_biot(self):
         self.biot_state_time_stamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -82,6 +93,9 @@ class OrgState:
         biot_state_dict = {"montage_configuration":montages_lst,"sensor":sensor_lst,"patch":patch_lst}
         self.biot_state_dict =biot_state_dict
 
+
+    def load_repo_state_From_release(self):
+        pass
     def check_repo_and_biot_diffs(self):
         
         state_diff_dict = {}
