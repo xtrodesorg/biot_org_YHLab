@@ -16,6 +16,7 @@ def revert_to_release(org_name,release_tag,env):
 
 if __name__=='__main__':
     
+    #call function 
     revert_to_release(ORG_NAME,RELEASE_TAG,ENV)
 
 
