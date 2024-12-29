@@ -9,13 +9,18 @@ from constants import *
 from datetime import datetime
 
 DEV_BASE_URL = 'https://api.dev.xtrodes1.biot-med.com'
+PROD_BASE_URL = 'https://api.xtrodes.biot-med.com'
+
 class OrgState:
     def __init__(self,org_name,env,username,password,release_tag= None):
         
         self.env = env
-
+        if env == 'production':
+            BASE_URL = PROD_BASE_URL
+        elif env == 'development':
+            BASE_URL = DEV_BASE_URL
         token = get_access_token(username,password,env)
-        api_client = APIClient(base_url=DEV_BASE_URL)
+        api_client = APIClient(base_url=BASE_URL)
         biot_client = BiotClient(api_client, token=token)
         self.data_mgr = DataManager(biot_client,allow_delete=True)
         self.report_mgr = ReportManager(self.data_mgr)
@@ -26,7 +31,7 @@ class OrgState:
 
         self.biot_state_time_stamp = None
         self.load_state_from_biot()
-        if release_tag == None:
+        if not release_tag:
             self.load_current_repo_state()
             self.repo_state_release_tag= None
         else:
@@ -59,7 +64,7 @@ class OrgState:
                 self.repo_state_dict = json.loads(state_json_str)
         except:
             print("No configuration file in repo")
-            self.repo_state_dict = None
+            self.repo_state_dict = {"montage_configuration": [] ,"sensor":[] ,"patch":[] }
         os.chdir('..')
 
     def load_release_repo_state(self,release_tag):
@@ -101,7 +106,7 @@ class OrgState:
         state_diff_dict = {}
         
         for template in ('montage_configuration','patch','sensor'):
-
+            
             miss_add_diff_dict = compare_if_name_key_in_one_list_only(self.biot_state_dict[template], self.repo_state_dict[template],'biot','repo')
             existing_with_diff_dict = compare_lists_of_dicts(self.biot_state_dict[template], self.repo_state_dict[template],'biot','repo')
             if miss_add_diff_dict:
@@ -118,10 +123,14 @@ class OrgState:
                         miss_add_diff_dict = compare_if_name_key_in_one_list_only(montage_biot[template], montage_repo[template],'biot','repo')
                         existing_with_diff_dict = compare_lists_of_dicts(montage_biot[template], montage_repo[template],'biot','repo')
                         if miss_add_diff_dict:
+                            if "montage_configuration" not in state_diff_dict.keys():
+                                state_diff_dict["montage_configuration"] = {"diffs":{montage_biot["_name"] : {}}}
                             if montage_biot["_name"] not in state_diff_dict["montage_configuration"]['diffs'].keys():
-                                state_diff_dict["montage_configuration"][template][montage_biot["_name"]]={}
+                                state_diff_dict["montage_configuration"]['diffs'][montage_biot["_name"]]={}
                             state_diff_dict["montage_configuration"]['diffs'][montage_biot["_name"]][template]= miss_add_diff_dict
                         if existing_with_diff_dict:
+                            if "montage_configuration" not in state_diff_dict.keys():
+                                state_diff_dict["montage_configuration"] = {"diffs":{montage_biot["_name"] : {}}}
                             if montage_biot["_name"] not in state_diff_dict["montage_configuration"]['diffs'].keys():
                                 state_diff_dict["montage_configuration"]['diffs'][template][montage_biot["_name"]]={}
                             if template not in state_diff_dict["montage_configuration"]['diffs'][montage_biot["_name"]].keys():

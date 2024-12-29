@@ -1,6 +1,6 @@
 import requests
 from biot_python_sdk.biot import *
-from State import StateDiff,OrgState
+from State import OrgState
 from login import get_access_token
 from constants import *
 

@@ -31,6 +31,7 @@ def post_entity_from_repo_by_template(template_diff_dict,template_repo_lst,templ
             if template=="montage_configuration":
                del post_dict["calibration_step"]
                del post_dict["channel"]
+            
             response = data_mgr._make_authenticated_request(GENERIC_ENTITES_URL+f'/templates/{template}','POST',post_dict)
             print(response)
             print(response.content)

@@ -84,11 +84,12 @@ def replace_ref_names_with_ref_id(data_mgr,entity,template_name,org_id):
             if key in ref_config[template_name]["ref_field"]:
                 idx = ref_config[template_name]["ref_field"].index(key)
                 ref_template=ref_config[template_name]["ref_template"][idx]
-                filter = {"_templateName":{"eq": ref_template},"_name":{"eq":entity[key]["name"]},"_ownerOrganization.id":{"eq":org_id}}
-                response = data_mgr.get_ge_by_filter(filter)
+                if entity[key]:
+                    filter = {"_templateName":{"eq": ref_template},"_name":{"eq":entity[key]["name"]},"_ownerOrganization.id":{"eq":org_id}}
+                    response = data_mgr.get_ge_by_filter(filter)
 
-                entity[key]["id"] = response["data"][0]["_id"]
-                del entity[key]["name"]
+                    entity[key]["id"] = response["data"][0]["_id"]
+                    del entity[key]["name"]
     return entity
 
 
@@ -122,8 +123,9 @@ def concat_diff_dicts_from_parent_template(state_diff_dict,parent_template,sub_t
                     concatenated_diff_dict['only_in_repo'].extend(template_diff_dict[sub_template]['only_in_repo'])
                 if 'only_in_biot' in template_diff_dict[sub_template].keys():
                     concatenated_diff_dict['only_in_biot'].extend(template_diff_dict[sub_template]['only_in_biot'])
-                for key in template_diff_dict[sub_template]['diffs'].keys():
-                        concatenated_diff_dict['diffs'][key] =  template_diff_dict[sub_template]['diffs'][key]
+                if 'diffs' in template_diff_dict[sub_template].keys(): 
+                    for key in template_diff_dict[sub_template]['diffs'].keys():
+                            concatenated_diff_dict['diffs'][key] =  template_diff_dict[sub_template]['diffs'][key]
 
     return concatenated_diff_dict
 
